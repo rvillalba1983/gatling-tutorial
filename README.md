@@ -1,158 +1,196 @@
-Tutorial de [Adictos al trabajo](https://www.adictosaltrabajo.com/2022/10/17/gatling-java-tests-de-performance/)
+# Gatling + Java: tests de performance
+
+[![CI](https://github.com/rvillalba1983/gatling-tutorial/actions/workflows/ci.yml/badge.svg)](https://github.com/rvillalba1983/gatling-tutorial/actions/workflows/ci.yml)
+
+Proyecto de ejemplo del tutorial publicado en [Adictos al trabajo](https://www.adictosaltrabajo.com/2022/10/17/gatling-java-tests-de-performance/) (octubre de 2022).
+
+> **Actualizado en 2026** a Java 25, Spring Boot 4.1 y Gatling 3.16. Respecto al artículo original se han eliminado las clases auxiliares de Gatling que ya no hacen falta, se han añadido *assertions* a la simulación, la carga es parametrizable y la prueba de carga se ejecuta en GitHub Actions. Algunas capturas son de la versión original y pueden no coincidir exactamente con el código actual.
+
 ### Índice
-- <a href="#01">Introducción</a>
-- <a href="#02">Requerimientos</a>
-- <a href="#03">Descripción de la prueba realizada</a>
-- <a href="#04">Cómo vamos a ejecutar los tests de Gatling</a>
-- <a href="#05">Cómo lanzar los tests de este proyecto</a>
-- <a href="#06">Pasos a seguir</a>
-- <a href="#07">Explicación de ficheros del proyecto</a>
-- <a href="#08">Nuestro test</a>
-- <a href="#09">Conceptos que maneja Gatling que hemos utilizado en el desarrollo del test</a>
-- <a href="#10">El test actual está configurado de la siguiente manera</a>
-- <a href="#11">Conclusión</a>
-- <a href="#12">Documentación utilizada</a>
+- [Introducción](#introducción)
+- [Requisitos](#requisitos)
+- [Descripción de la prueba realizada](#descripción-de-la-prueba-realizada)
+- [Cómo vamos a ejecutar los tests de Gatling](#cómo-vamos-a-ejecutar-los-tests-de-gatling)
+- [Cómo lanzar los tests de este proyecto](#cómo-lanzar-los-tests-de-este-proyecto)
+- [Explicación de ficheros del proyecto](#explicación-de-ficheros-del-proyecto)
+- [Nuestro test](#nuestro-test)
+- [Conceptos de Gatling utilizados en el test](#conceptos-de-gatling-utilizados-en-el-test)
+- [Configuración de la carga](#configuración-de-la-carga)
+- [Prueba de carga en integración continua](#prueba-de-carga-en-integración-continua)
+- [Conclusión](#conclusión)
+- [Documentación utilizada](#documentación-utilizada)
 
+## Introducción
 
+Gatling permite programar tests de rendimiento/performance escribiendo código, sin herramientas visuales como podría ser JMeter.
+En las primeras versiones de Gatling los tests se escribían en Scala, pero desde la versión 3.7 hay DSL para Java y Kotlin. Este proyecto usa el DSL de Java.
 
-### <a name="01">Introducción</a>
+Es una tecnología muy configurable, lo que aporta un gran valor en este tipo de pruebas, y puede utilizarse para la mayoría de los escenarios que se necesiten. Además genera un informe bastante completo con todos los resultados desgranados.
 
-Gatling permite programar tests de rendimiento/performance utilizando tests "de código" sin herramientas visuales como podría ser Jmeter.
-En versiones anteriores de Gatling el lenguaje que se utilizaba para escribir los tests era Scala pero en las últimas versiones han añadido soporte para Java y Kotlin, aunque en última instancia parece que siempre ejecuta código Scala.
+## Requisitos
 
-Es una tecnología muy configurable, lo que aporta un gran valor en este tipo de pruebas y puede utilizarse para la mayoría de los escenarios que se necesiten. Además genera un informe bastante completo con todos los resultados desgranados.
+- Java 25 (recomendamos gestionar las versiones con [SDKMAN!](https://www.adictosaltrabajo.com/2017/04/10/gestiona-tus-herramientas-de-desarrollo-con-sdkman/))
+- Maven 3.9 o superior
+- Tu IDE favorito. Nosotros utilizamos IntelliJ.
 
-### <a name="02">Requerimientos</a>
+## Descripción de la prueba realizada
 
-- Java 11 o + (Recomendamos revisar https://www.adictosaltrabajo.com/2017/04/10/gestiona-tus-herramientas-de-desarrollo-con-sdkman/ )
-- Maven 3.x
-- Tu ide favorito. Nosotros utilizaremos Intellij.
-- Proyecto de ejemplo en github  http://github.TODO.COM
+Vamos a realizar las pruebas sobre un proyecto Java + Spring Boot con un único endpoint REST:
 
-### <a name="03">Descripción de la prueba realizada</a>
+```
+GET /characters/randoms/{quantity}
+```
 
-Vamos a realizar las pruebas sobre un proyecto Java + Springboot (http://github.TODO.COM) con un único endpoint rest. Haremos tests de rendimiento utilizando tests con Gatling programados en Java.
+Devuelve `quantity` personajes de videojuego generados aleatoriamente con [Datafaker](https://www.datafaker.net/). Sobre él lanzaremos tests de rendimiento escritos con Gatling en Java.
 
-### <a name="04">Cómo vamos a ejecutar los tests de Gatling</a>
+## Cómo vamos a ejecutar los tests de Gatling
 
-La forma que hemos elegido para ejecutarlo es mediante el plugin de maven (también se puede utilizar Gradle).
+Usamos el [plugin de Maven de Gatling](https://docs.gatling.io/reference/integrations/build-tools/maven-plugin/) (también existe para Gradle y sbt). Hay otras formas de ejecutar Gatling, pero no forman parte de este tutorial.
 
-Existen otras formas de ejecutar Gatling pero no son parte de este tutorial.
+## Cómo lanzar los tests de este proyecto
 
-Si queréis investigar más sobre el plugin de maven y sus configuraciones https://gatling.io/docs/gatling/reference/current/extensions/maven_plugin/
+1. Clona el proyecto:
 
+   ```bash
+   git clone https://github.com/rvillalba1983/gatling-tutorial.git
+   ```
 
-### <a name="05">Cómo lanzar los tests de este proyecto</a>
+   Es un proyecto "dummy" con un endpoint que crea personajes de videojuegos de forma aleatoria. Incluye además un test de integración con Spring Boot para comprobar en local que funciona (y para que juguéis).
 
-- Primero tendremos que descargar el proyecto de ejemplo para este tutorial http://github.TODO.COM
-- Una vez importado debéis ver algo así:
+   Para que el informe de Gatling quede lo más completo posible, la API **lanza errores de forma aleatoria** (un 5 % de las peticiones por defecto) y simula 5 ms de latencia por cada personaje generado, como si consultara una base de datos. Ambos valores se configuran en `application.properties`:
 
-![estructura](doc/images/estructura.png)
+   ```properties
+   app.simulation.error-rate=0.05
+   app.simulation.latency-millis=5
+   ```
 
-Este es un proyecto "dummy" con un ejemplo de endpoint que crea personajes de videojuegos de forma aleatoria.
+2. Compila y lanza los tests:
 
-Hemos añadido además un test de integración con Springboot para poder probarlo en local y confirmar que funciona (y para que juguéis).
+   ```bash
+   mvn clean verify
+   ```
 
-Para que el informe de Gatling nos quede lo más completo visible para este tutorial, el proyecto dummy lanza excepciones de forma aleatoria.
+3. Arranca la aplicación. Desde el IDE basta con ejecutar la clase `GatlingTutorialApplication`, o desde terminal:
 
-### <a name="06">Pasos a seguir</a>
+   ```bash
+   mvn spring-boot:run
+   ```
 
-- Una vez descargado el proyecto y compilado con
+   La aplicación escucha en el puerto 8023 (configurado en `application.properties`).
 
-mvn clean install
+   ![start](docs/images/start.png)
 
-- Deberemos arrancar en local la aplicación. Si utilizáis un ide basta con seleccionar la clase GatlingTutorialJavaApplication y ejecutarla.
-  Ya tenemos la aplicación levantada, la hemos configurado para el puerto 8023 por defecto (en el application.properties)
+4. Desde otra terminal, en la raíz del proyecto, lanza los tests de Gatling:
 
-![start](doc/images/start.png)
+   ```bash
+   mvn gatling:test
+   ```
 
-- Ahora es el momento de ejecutar el comando para lanzar los tests de gatling, desde la raíz del proyecto (donde está el pom.xml).
+5. Cuando termina la ejecución, Gatling muestra un resumen en modo texto y un enlace al informe HTML:
 
-mvn clean gatling:test
+   ![resultado](docs/images/resultado.png)
 
-- Cuanto termina la ejecución muestra un resumen en modo “texto” y un link al informe generado en html:
+   El informe se guarda en `target/gatling`. Si no se hace `clean`, se conservan todas las ejecuciones, cada una en una carpeta con la fecha y hora en que se lanzó.
 
-![resultado](doc/images/resultado.png)
+   ![targetInforme](docs/images/targetInforme.png)
 
-- Como se puede ver el informe html se genera y se guarda en target/gatling. Si no se utiliza el “clean” de maven se verían todas las ejecuciones que se han realizado, cada una en una carpeta con el timestamp de cuándo se ejecutó.
+6. Abre el `index.html` con tu navegador y verás algo como esto:
 
-![targetInforme](doc/images/targetInforme.png)
+   ![informe](docs/images/informe.png)
 
-- Al abrir index.html con tu navegador favorito podrás ver algo como ésto
+## Explicación de ficheros del proyecto
 
-![informe](doc/images/informe.png)
+Los ficheros relacionados con Gatling son:
 
+- `src/test/java/com/rvillalba/gatling/tutorial/simulation/NonPlayableCharacterSimulation.java`: el test propiamente dicho (en Gatling, una *Simulation*).
+- `src/test/resources/logback-test.xml`: configuración de logs. Descomentando el logger `io.gatling.http.engine.response` se pueden ver las peticiones fallidas (`DEBUG`) o todas (`TRACE`).
 
-### <a name="07">Explicación de ficheros del proyecto</a>
+En la versión original del artículo había además varios ficheros copiados de la documentación de Gatling:
 
-Vamos a dar pequeñas pinceladas de todos los ficheros referentes a Gatling que hemos tenido que utilizar:
+- `Engine.java`, `IDEPathHelper.java` y `Recorder.java`, para lanzar Gatling y su grabador desde el IDE.
+- `gatling.conf` y `recorder.conf`, con la configuración por defecto.
 
-- De src/test/resources:
-    - gatling.conf. Es la configuración base de Gatling, para este ejemplo no se ha tocado, pero como se puede ver es bastante configurable.
-    - logback-test.xml. A partir de este fichero de configuración de logs se pueden mostrar las trazas de las respuestas por ejemplo, poniendo a debug la siguiente paquetería “io.gatling.http.response".
-    - recorder.conf. Es la configuración de la grabación de Gatling. No se ha tocado para esta prueba.
-- De src/test/java/gatling/base. Todos estos ficheros se han copiado tal cual de la documentación:
-    - Engine.java. Es el motor de gatling y se puede ver que es un main, seguramente con el que arranca todo.
-    - IDEPathHelper.java. Por lo que entiendo aquí es donde se buscan todas las rutas de maven para coger las configuraciones y dejar los resultados.
-    - Recorder.java. La configuración del grabador.
-- De src/test/java/gatling/com/autentia/rvillalba/gatling/tutorial/java:
-    - NonPlayableCharacterSimulation.java. Esto es el test propiamente dicho.
+Con las versiones actuales del plugin ya no hacen falta. `mvn gatling:test` lanza las simulaciones, `mvn gatling:recorder` abre el grabador, y si no hay `gatling.conf` se usa la configuración por defecto. Así el proyecto solo contiene código de test.
 
-Los demás ficheros anteriores serían únicamente para poder levantar y configurar Gatling, son comunes a todos los tests. Así nuestras "Simulation" ya solo contienen código de test y queda todo bastante limpio.
+## Nuestro test
 
-### <a name="08">Nuestro test</a>
+Realiza varias llamadas al endpoint variando el parámetro `quantity`. Es sencillo, pero suficiente para este tutorial:
 
-Realiza varias llamadas variando el parámetro quantity a nuestro único endpoint. Bastante sencillo pero suficiente para este tutorial.
+```java
+private final ChainBuilder progressiveRandoms =
+        exec(http("1 result").get("/randoms/1").check(status().is(200)))
+                .exec(http("50 results").get("/randoms/50").check(status().is(200)))
+                .exec(http("500 results").get("/randoms/500").check(status().is(200)));
 
-![test](doc/images/test.png)
+private final ChainBuilder massiveRandoms =
+        exec(http("1000 results").get("/randoms/1000").check(status().is(200)))
+                .exec(http("800 results").get("/randoms/800").check(status().is(200)))
+                .exec(http("1300 results").get("/randoms/1300").check(status().is(200)));
 
-### <a name="09">Conceptos que maneja Gatling que hemos utilizado en el desarrollo del test</a>
+{
+    setUp(
+            progressiveCharactersScenario.injectOpen(rampUsers(USERS).during(RAMP_SECONDS)),
+            massiveCharactersScenario.injectOpen(rampUsers(USERS).during(RAMP_SECONDS)))
+            .protocols(httpProtocol)
+            .assertions(
+                    global().failedRequests().percent().lt(10.0),
+                    global().responseTime().percentile(95.0).lt(30_000));
+}
+```
 
-Como se puede ver en el test Gatling tiene varios conceptos, que aunque simples, pueden ser un poco liosos al principio (hay una pequeña curva de aprendizaje):
+## Conceptos de Gatling utilizados en el test
 
-- Chain. Un chain es un grupo de acciones que se van a ejecutar en el orden que se establecen.
-    - En nuestro caso hemos creado 2 chain progressiveRandoms y massiveRandoms. Ambos contienen 3 llamadas http.
-- Action. Las actions en Gatling se representan por métodos, explicamos los que hemos utilizado y alguno más que nos ha parecido interesante:
-    - exec - Se suele utilizar para realizar las llamadas http a los endpoints.
-    - pause - Entre llamada y llamada hace una parada por el tiempo indicado.
-    - repeat - Permite repetir n veces otra acción, por ejemplo un exec.
-    - http. Es lo que se utiliza para formar una llamada en Gatling, en nuestro caso un GET.
-      Aquí es donde podemos añadir un body, headers y demás cuestiones. Gatling ofrece también clases para leer ficheros json y csv y poder hacer acciones a partir de ficheros de datos.
-      Existe una cantidad ingente de métodos que nos permite hacer validaciones sobre los valores que llegan en una respuesta y reutilizarlos en posteriores acciones (para guardar con saveAs)
-      Además trae utilidades para lectura de csvs y lanzar acciones por cada registro del csv y así realizar pruebas parametrizadas.
-- HttpProtocolBuilder. Este builder sirve para configurar todas las cosas genéricas de varias peticiones a un mismo servicio. Se puede indicar desde la baseUrl hasta las headers generales para no tener toda esta información duplicada por cada action.
-- Scenario. Un escenario puede contener varios Chain, aunque nosotros en el ejemplo solo hemos puesto uno. Cada escenario se lanza de forma separada y puede llevar configuraciones de usuarios concurrentes y duración distintas. Esto nos puede permitir probar en paralelo flujos distintos.
+Gatling maneja varios conceptos que, aunque simples, pueden resultar un poco liosos al principio (hay una pequeña curva de aprendizaje):
 
-En el informe html aparecerá todo separado por Scenario, Chain y Action, por eso hemos puesto nombres descriptivos en cada elemento.
+- **Chain**: grupo de acciones que se ejecutan en el orden en que se definen. En nuestro caso hay dos, `progressiveRandoms` y `massiveRandoms`, con tres llamadas HTTP cada una.
+- **Action**: las acciones se representan con métodos. Estos son los que usamos, más alguno interesante:
+  - `exec`: ejecuta una acción, normalmente una llamada HTTP.
+  - `pause`: hace una parada del tiempo indicado entre llamada y llamada.
+  - `repeat`: repite *n* veces otra acción, por ejemplo un `exec`.
+  - `http`: construye una petición, en nuestro caso un GET. Aquí se pueden añadir body, cabeceras, etc. Gatling ofrece también *feeders* para leer ficheros CSV o JSON y lanzar pruebas parametrizadas, y muchas utilidades para validar las respuestas y guardar valores (`saveAs`) que se reutilizan en peticiones posteriores.
+- **Check**: validaciones sobre la respuesta. Con `check(status().is(200))` una respuesta con otro código se marca como KO en el informe.
+- **HttpProtocolBuilder**: configuración común a todas las peticiones a un mismo servicio, desde la `baseUrl` hasta las cabeceras generales, para no repetirla en cada acción.
+- **Scenario**: puede contener varios *chains*. Cada escenario se lanza por separado, con su propia configuración de usuarios y duración, lo que permite probar flujos distintos en paralelo.
+- **Assertions**: criterios de aceptación de la prueba completa. Si no se cumplen, `mvn gatling:test` termina con error, lo que permite usar Gatling como "puerta de calidad" en CI. Aquí exigimos menos de un 10 % de peticiones fallidas y un percentil 95 por debajo de 30 segundos.
 
-### <a name="10">El test actual está configurado de la siguiente manera</a>
+En el informe HTML aparece todo separado por escenario y petición, por eso conviene poner nombres descriptivos a cada elemento.
 
-Por cada usuario se realizarán los escenarios progressiveCharactersScenario y randomCharactersScenario durante 10 segundos.
+## Configuración de la carga
 
-Está en modo “rampUsers” con un máximo de 1000 usuarios concurrentes.
-Esto quiere decir que irá metiendo peticiones por usuarios distintos hasta que tenga 1000 en paralelo, se puede ver bien en las gráficas del informe.
+Por defecto cada escenario recibe **1000 usuarios** que van entrando de forma progresiva durante **10 segundos** (`rampUsers`). Cada usuario hace las 3 peticiones de su escenario, así que en total se lanzan 6000 peticiones. Se ve bien en las gráficas del informe.
 
-Con esta configuración se lanzan 6000 peticiones en alrededor de 2 minutos.
+La carga y la URL se pueden cambiar sin tocar el código, con propiedades de sistema:
 
-### <a name="11">Conclusión</a>
+```bash
+mvn gatling:test -Dusers=200 -DrampSeconds=5 -DbaseUrl=http://mi-entorno:8023
+```
+
+## Prueba de carga en integración continua
+
+El workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) tiene dos jobs:
+
+1. **Compilar y tests**: `mvn verify`, que ejecuta también el test de integración.
+2. **Prueba de carga con Gatling**: empaqueta la aplicación, la arranca, lanza la simulación con una carga reducida (100 usuarios por escenario) y publica el informe HTML como artefacto de la ejecución (`informe-gatling`). Desde la pestaña *Actions* se puede lanzar a mano con otro número de usuarios.
+
+Si las *assertions* no se cumplen, el job falla.
+
+## Conclusión
 
 Gatling funciona bastante bien y permite realizar muchas llamadas en paralelo.
-Aun así está sujeto, igual que otras herramientas, a los recursos de la máquina en la que se lanza.
-Por lo que estos resultados pueden variar según el equipo desde donde se ejecute. Su uso debería estar ligado a un entorno controlado donde estuviera la aplicación desplegada.
-Para complementar los resultados ofrecidos por Gatling sería muy interesante utilizar un APM (como https://glowroot.org/).
+Aun así está sujeto, igual que otras herramientas, a los recursos de la máquina desde la que se lanza, así que los resultados pueden variar según el equipo. Lo ideal es usarlo en un entorno controlado donde esté desplegada la aplicación.
+Para complementar los resultados de Gatling sería muy interesante utilizar un APM (como [Glowroot](https://glowroot.org/)).
 
-Además, resulta muy interesante para “acercar al código” las pruebas de rendimiento.
-Históricamente se realizan con herramientas tipo Jmeter que nos obliga a utilizar una aplicación externa al código y que conllevan un aprendizaje sobre una herramienta "externa al código",
-pero si se quisiera, Gatling se puede utilizar con su "Gatling Recorder" que es una aplicación de escritorio para crear y lanzar las pruebas.
+Además, resulta muy interesante para "acercar al código" las pruebas de rendimiento.
+Históricamente se han hecho con herramientas tipo JMeter, que obligan a aprender una aplicación externa al código. Si se prefiere, Gatling también tiene el *Gatling Recorder*, una aplicación de escritorio para grabar y crear las pruebas.
 
-Al poder ejecutarse con maven o desde plugins de ci/cd puede automatizarse de forma sencilla para ejecutarse asiduamente.
+Al poder ejecutarse con Maven puede automatizarse fácilmente en CI/CD, como hacemos en este repositorio, y combinarse con las *assertions* para que una degradación del rendimiento rompa la build.
 
-Como el informe es una web estática también podría plantearse tener un histórico de resultados vía web o utilizar los plugins de CI/CD que permiten ver el informe generado embebido.
+Como el informe es una web estática, también podría plantearse tener un histórico de resultados o usar los plugins de CI/CD que muestran el informe embebido.
 
-![plugins](doc/images/plugins.png)
+![plugins](docs/images/plugins.png)
 
-#### <a name="12">Documentación utilizada</a>
+## Documentación utilizada
 - https://gatling.io/
-- https://gatling.io/docs/gatling/tutorials/advanced/
+- https://docs.gatling.io/tutorials/
+- https://docs.gatling.io/reference/integrations/build-tools/maven-plugin/
 - https://github.com/gatling/gatling-maven-plugin-demo-java
-- https://github.com/gatling/gatling/tree/main/gatling-samples/src/main
